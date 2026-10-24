@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="YorkshireWater.Api/YorkshireWater.Api.csproj" />
+  <Project Path="YorkshireWater.Tests/YorkshireWater.Tests.csproj" />
+</Solution>
