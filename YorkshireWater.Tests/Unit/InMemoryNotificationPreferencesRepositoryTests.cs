@@ -1,4 +1,7 @@
-﻿namespace YorkshireWater.Tests.Unit
+﻿using YorkshireWater.Api.Domain;
+using YorkshireWater.Api.Infrastructure;
+
+namespace YorkshireWater.Tests.Unit
 {
     public class InMemoryNotificationPreferencesRepositoryTests
     {
