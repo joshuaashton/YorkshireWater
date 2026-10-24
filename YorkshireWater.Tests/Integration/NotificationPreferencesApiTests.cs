@@ -195,5 +195,21 @@ namespace YorkshireWater.Tests.Integration
 
             Assert.Equal(new NotificationPreferencesResponse(SeedData.Josh, EmailEnabled: false, SmsEnabled: true), stored);
         }
+
+        [Fact]
+        public async Task Put_Returns503AndKeepsChanges_WhenNotifierTimesOut()
+        {
+            _factory.Notifier
+                .Setup(n => n.NotifyAsync(It.IsAny<Guid>(), It.IsAny<NotificationPreferences>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new TaskCanceledException("notification system timed out"));
+
+            var response = await _client.PutAsJsonAsync(Url(SeedData.Josh), new { emailEnabled = false, smsEnabled = true });
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+
+            var stored = await _client.GetFromJsonAsync<NotificationPreferencesResponse>(Url(SeedData.Josh));
+
+            Assert.Equal(new NotificationPreferencesResponse(SeedData.Josh, EmailEnabled: false, SmsEnabled: true), stored);
+        }
     }
 }

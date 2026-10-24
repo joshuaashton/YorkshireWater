@@ -107,5 +107,38 @@ namespace YorkshireWater.Tests.Unit
 
             _repository.Verify(r => r.UpdateAsync(CustomerId, Changed, It.IsAny<CancellationToken>()), Times.Once);
         }
+
+        [Fact]
+        public async Task UpdateAsync_ReturnsNotificationFailed_WhenNotifierTimesOut()
+        {
+            _repository.Setup(r => r.GetAsync(CustomerId, It.IsAny<CancellationToken>())).ReturnsAsync(Current);
+
+            // A dependency timeout (e.g. HttpClient) surfaces as TaskCanceledException even though the caller did not cancel
+            _notifier.Setup(n => n.NotifyAsync(CustomerId, Changed, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new TaskCanceledException("notification system timed out"));
+
+            var result = await _service.UpdateAsync(CustomerId, Changed, CancellationToken.None);
+
+            var failed = Assert.IsType<UpdatePreferencesResult.NotificationFailed>(result);
+
+            Assert.Equal(Changed, failed.Preferences);
+        }
+
+        [Fact]
+        public async Task UpdateAsync_PropagatesCancellation_WhenCallerCancelsDuringNotification()
+        {
+            using var cancellation = new CancellationTokenSource();
+
+            _repository.Setup(r => r.GetAsync(CustomerId, It.IsAny<CancellationToken>())).ReturnsAsync(Current);
+
+            _notifier.Setup(n => n.NotifyAsync(CustomerId, Changed, It.IsAny<CancellationToken>()))
+                .Returns(async () =>
+                {
+                    await cancellation.CancelAsync();
+                    cancellation.Token.ThrowIfCancellationRequested();
+                });
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.UpdateAsync(CustomerId, Changed, cancellation.Token));
+        }
     }
 }

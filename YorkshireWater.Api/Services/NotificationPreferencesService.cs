@@ -31,7 +31,9 @@ namespace YorkshireWater.Api.Services
             {
                 await notifier.NotifyAsync(customerId, requested, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // Only a cancellation the caller asked for propagates. A dependency timeout also throws an
+            // OperationCanceledException (TaskCanceledException) and is a notification failure like any other
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Preferences for customer {CustomerId} were saved but the change notification failed", customerId);
 
