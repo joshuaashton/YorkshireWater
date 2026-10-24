@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+  </Folder>
   <Project Path="YorkshireWater.Api/YorkshireWater.Api.csproj" />
   <Project Path="YorkshireWater.Tests/YorkshireWater.Tests.csproj" />
 </Solution>
