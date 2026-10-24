@@ -1,6 +1,8 @@
-﻿using System.Net;
+﻿using Moq;
+using System.Net;
 using System.Net.Http.Json;
 using YorkshireWater.Api.Contracts;
+using YorkshireWater.Api.Domain;
 using YorkshireWater.Api.Infrastructure;
 
 namespace YorkshireWater.Tests.Integration
@@ -25,6 +27,11 @@ namespace YorkshireWater.Tests.Integration
 
         private static string Url(Guid customerId) => Url(customerId.ToString());
         private static string Url(string customerId) => $"/api/customers/{customerId}/notification-preferences";
+
+        private void AssertNoNotificationWasRequested() =>
+            _factory.Notifier.Verify(
+            n => n.NotifyAsync(It.IsAny<Guid>(), It.IsAny<NotificationPreferences>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
         // AC01
         [Fact]
@@ -55,6 +62,56 @@ namespace YorkshireWater.Tests.Integration
             var response = await _client.GetAsync(Url("not-a-guid"));
 
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        // AC03 + AC04
+        [Fact]
+        public async Task Put_PersistsAndReturnsUpdatedPreferences_ForSeededCustomer()
+        {
+            var response = await _client.PutAsJsonAsync(Url(SeedData.Josh), new { emailEnabled = false, smsEnabled = true });
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var expected = new NotificationPreferencesResponse(SeedData.Josh, EmailEnabled: false, SmsEnabled: true);
+
+            Assert.Equal(expected, await response.Content.ReadFromJsonAsync<NotificationPreferencesResponse>());
+            Assert.Equal(expected, await _client.GetFromJsonAsync<NotificationPreferencesResponse>(Url(SeedData.Josh)));
+        }
+
+        // AC06
+        [Fact]
+        public async Task Put_RequestsNotificationOnce_WhenPreferencesChange()
+        {
+            await _client.PutAsJsonAsync(Url(SeedData.Josh), new { emailEnabled = false, smsEnabled = true });
+
+            _factory.Notifier.Verify(
+                n => n.NotifyAsync(
+                    SeedData.Josh,
+                    new NotificationPreferences(EmailEnabled: false, SmsEnabled: true),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        // AC05
+        [Fact]
+        public async Task Put_DoesNotRequestNotification_WhenPreferencesUnchanged()
+        {
+            var response = await _client.PutAsJsonAsync(Url(SeedData.Josh), new { emailEnabled = true, smsEnabled = false });
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            AssertNoNotificationWasRequested();
+        }
+
+        // AC07
+        [Fact]
+        public async Task Put_Returns404AndDoesNotNotify_ForUnknownCustomer()
+        {
+            var response = await _client.PutAsJsonAsync(Url(UnknownCustomer), new { emailEnabled = true, smsEnabled = true });
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+            AssertNoNotificationWasRequested();
         }
     }
 }

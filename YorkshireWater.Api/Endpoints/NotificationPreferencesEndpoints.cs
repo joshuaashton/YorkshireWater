@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http.HttpResults;
 using YorkshireWater.Api.Contracts;
+using YorkshireWater.Api.Domain;
 using YorkshireWater.Api.Services;
 
 namespace YorkshireWater.Api.Endpoints
@@ -15,6 +16,7 @@ namespace YorkshireWater.Api.Endpoints
             var group = app.MapGroup(Route).WithTags("Notification preferences");
 
             group.MapGet("", GetPreferences).WithName("GetNotificationPreferences");
+            group.MapPut("", UpdatePreferences).WithName("UpdateNotificationPreferences");
 
             return app;
         }
@@ -29,6 +31,32 @@ namespace YorkshireWater.Api.Endpoints
             return preferences is null
                 ? CustomerNotFound(customerId)
                 : TypedResults.Ok(NotificationPreferencesResponse.From(customerId, preferences));
+        }
+
+        private static async Task<Results<Ok<NotificationPreferencesResponse>, ProblemHttpResult>> UpdatePreferences(
+            Guid customerId,
+            UpdateNotificationPreferencesRequest request,
+            INotificationPreferencesService service,
+            CancellationToken cancellationToken)
+        {
+            var result = await service.UpdateAsync(customerId, request.ToDomain(), cancellationToken);
+
+            return result switch
+            {
+                UpdatePreferencesResult.Updated updated =>
+                    TypedResults.Ok(NotificationPreferencesResponse.From(customerId, updated.Preferences)),
+
+                UpdatePreferencesResult.CustomerNotFound =>
+                    CustomerNotFound(customerId),
+
+                UpdatePreferencesResult.NotificationFailed =>
+                    TypedResults.Problem(
+                        statusCode: StatusCodes.Status503ServiceUnavailable,
+                        title: "Preferences saved but notification failed",
+                        detail: "The preferences were stored, but the notification system could not be informed of the change."),
+
+                _ => throw new InvalidOperationException($"Unhandled result type {result.GetType().Name}"),
+            };
         }
 
         private static ProblemHttpResult CustomerNotFound(Guid customerId) =>
