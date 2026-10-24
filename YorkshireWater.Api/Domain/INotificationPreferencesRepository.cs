@@ -6,8 +6,9 @@
         Task<NotificationPreferences?> GetAsync(Guid customerId, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Replaces the preferences of an existing customer. Returns false if the customer does not exist
+        /// Replaces the preferences of an existing customer or throws an exception if the customer does not exist
         /// </summary>
-        Task<bool> UpdateAsync(Guid customerId, NotificationPreferences preferences, CancellationToken cancellationToken = default);
+        /// <exception cref="InvalidOperationException">The customer does not exist.</exception>
+        Task UpdateAsync(Guid customerId, NotificationPreferences preferences, CancellationToken cancellationToken = default);
     }
 }

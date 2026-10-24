@@ -41,18 +41,18 @@ namespace YorkshireWater.Tests.Unit
         {
             var updated = new NotificationPreferences(EmailEnabled: false, SmsEnabled: true);
 
-            var persisted = await _repository.UpdateAsync(KnownCustomer, updated);
+            await _repository.UpdateAsync(KnownCustomer, updated);
 
-            Assert.True(persisted);
             Assert.Equal(updated, await _repository.GetAsync(KnownCustomer));
         }
 
         [Fact]
-        public async Task UpdateAsync_DoesNotCreateCustomer_ForUnknownCustomer()
+        public async Task UpdateAsync_ThrowsAndDoesNotCreateCustomer_ForUnknownCustomer()
         {
-            var persisted = await _repository.UpdateAsync(UnknownCustomer, new NotificationPreferences(true, true));
+            var preferences = new NotificationPreferences(EmailEnabled: true, SmsEnabled: true);
 
-            Assert.False(persisted);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _repository.UpdateAsync(UnknownCustomer, preferences));
+
             Assert.Null(await _repository.GetAsync(UnknownCustomer));
         }
     }

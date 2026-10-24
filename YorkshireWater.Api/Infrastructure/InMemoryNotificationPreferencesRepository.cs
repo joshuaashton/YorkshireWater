@@ -15,14 +15,13 @@ namespace YorkshireWater.Api.Infrastructure
             return Task.FromResult(preferences);
         }
 
-        public Task<bool> UpdateAsync(Guid customerId, NotificationPreferences preferences, CancellationToken cancellationToken = default)
+        public Task UpdateAsync(Guid customerId, NotificationPreferences preferences, CancellationToken cancellationToken = default)
         {
-            if (!_store.ContainsKey(customerId)) return Task.FromResult(false);
+            if (!_store.ContainsKey(customerId))
+                throw new InvalidOperationException($"Customer '{customerId}' does not exist");
 
-            // Customers are never removed so the key is always present here
             _store[customerId] = preferences;
-
-            return Task.FromResult(true);
+            return Task.CompletedTask;
         }
     }
 }
