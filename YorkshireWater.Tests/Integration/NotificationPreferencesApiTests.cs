@@ -1,6 +1,8 @@
 ﻿using Moq;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json.Nodes;
 using YorkshireWater.Api.Contracts;
 using YorkshireWater.Api.Domain;
 using YorkshireWater.Api.Infrastructure;
@@ -32,6 +34,9 @@ namespace YorkshireWater.Tests.Integration
             _factory.Notifier.Verify(
             n => n.NotifyAsync(It.IsAny<Guid>(), It.IsAny<NotificationPreferences>(), It.IsAny<CancellationToken>()),
             Times.Never);
+
+        private Task<HttpResponseMessage> PutRawAsync(Guid customerId, string body) => 
+            _client.PutAsync(Url(customerId), new StringContent(body, Encoding.UTF8, "application/json"));
 
         // AC01
         [Fact]
@@ -112,6 +117,83 @@ namespace YorkshireWater.Tests.Integration
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
             AssertNoNotificationWasRequested();
+        }
+
+        // AC08: a well formed body with a missing or null property fails validation whilst naming the property.
+        [Theory]
+        [InlineData("""{ "emailEnabled": true }""", "SmsEnabled")]
+        [InlineData("""{ "smsEnabled": true }""", "EmailEnabled")]
+        [InlineData("""{ "emailEnabled": null, "smsEnabled": true }""", "EmailEnabled")]
+        [InlineData("""{}""", "EmailEnabled")]
+        public async Task Put_Returns400NamingTheProperty_WhenPropertyMissing(string body, string expectedErrorKey)
+        {
+            var response = await PutRawAsync(SeedData.Josh, body);
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+            var problem = await response.Content.ReadFromJsonAsync<JsonObject>();
+
+            Assert.True(problem!["errors"]!.AsObject().ContainsKey(expectedErrorKey));
+        }
+
+        // AC08: a body that cannot be read at all is rejected before validation with an explanation
+        [Theory]
+        [InlineData("""{ "emailEnabled": "yes", "smsEnabled": true }""")]
+        [InlineData("")]
+        [InlineData("not json")]
+        public async Task Put_Returns400WithDetail_WhenBodyIsMalformed(string body)
+        {
+            var response = await PutRawAsync(SeedData.Josh, body);
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+            var problem = await response.Content.ReadFromJsonAsync<JsonObject>();
+
+            Assert.False(string.IsNullOrWhiteSpace((string?)problem!["detail"]));
+        }
+
+        // AC08: whichever way the body is invalid, nothing is stored and nothing is notified
+        [Theory]
+        [InlineData("""{ "emailEnabled": true }""")]
+        [InlineData("not json")]
+        public async Task Put_DoesNotMutateOrNotify_ForInvalidBody(string body)
+        {
+            var before = await _client.GetFromJsonAsync<NotificationPreferencesResponse>(Url(SeedData.Josh));
+
+            await PutRawAsync(SeedData.Josh, body);
+
+            Assert.Equal(before, await _client.GetFromJsonAsync<NotificationPreferencesResponse>(Url(SeedData.Josh)));
+            AssertNoNotificationWasRequested();
+        }
+
+        // AC09
+        [Fact]
+        public async Task Put_Returns400_ForInvalidGuid()
+        {
+            var response = await _client.PutAsJsonAsync(Url("not-a-guid"), new { emailEnabled = true, smsEnabled = true });
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        // AC10
+        [Fact]
+        public async Task Put_Returns503AndKeepsChanges_WhenNotifierFails()
+        {
+            _factory.Notifier
+                .Setup(n => n.NotifyAsync(It.IsAny<Guid>(), It.IsAny<NotificationPreferences>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("notification system down"));
+
+            var response = await _client.PutAsJsonAsync(Url(SeedData.Josh), new { emailEnabled = false, smsEnabled = true });
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+
+            var problem = await response.Content.ReadFromJsonAsync<JsonObject>();
+
+            Assert.Equal(503, (int)problem!["status"]!);
+
+            var stored = await _client.GetFromJsonAsync<NotificationPreferencesResponse>(Url(SeedData.Josh));
+
+            Assert.Equal(new NotificationPreferencesResponse(SeedData.Josh, EmailEnabled: false, SmsEnabled: true), stored);
         }
     }
 }
