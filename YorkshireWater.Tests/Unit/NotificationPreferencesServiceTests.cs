@@ -1,4 +1,5 @@
-﻿using Moq;
+﻿using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using YorkshireWater.Api.Domain;
 using YorkshireWater.Api.Services;
 
@@ -16,7 +17,10 @@ namespace YorkshireWater.Tests.Unit
 
         public NotificationPreferencesServiceTests()
         {
-            _service = new NotificationPreferencesService(_repository.Object, _notifier.Object);
+            _service = new NotificationPreferencesService(
+                _repository.Object,
+                _notifier.Object,
+                NullLogger<NotificationPreferencesService>.Instance);
         }
 
         private void AssertNothingWasPersisted()
@@ -70,6 +74,38 @@ namespace YorkshireWater.Tests.Unit
 
             _repository.Verify(r => r.UpdateAsync(CustomerId, Changed, It.IsAny<CancellationToken>()), Times.Once);
             _notifier.Verify(n => n.NotifyAsync(CustomerId, Changed, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task UpdateAsync_DoesNotPersistOrNotify_WhenPreferencesUnchanged()
+        {
+            _repository.Setup(r => r.GetAsync(CustomerId, It.IsAny<CancellationToken>())).ReturnsAsync(Current);
+
+            var result = await _service.UpdateAsync(CustomerId, Current);
+
+            var updated = Assert.IsType<UpdatePreferencesResult.Updated>(result);
+
+            Assert.Equal(Current, updated.Preferences);
+
+            AssertNothingWasPersisted();
+            AssertNoNotificationWasRequested();
+        }
+
+        [Fact]
+        public async Task UpdateAsync_ReturnsNotificationFailed_WhenNotifierThrowsAfterPersisting()
+        {
+            _repository.Setup(r => r.GetAsync(CustomerId, It.IsAny<CancellationToken>())).ReturnsAsync(Current);
+
+            _notifier.Setup(n => n.NotifyAsync(CustomerId, Changed, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("notification system down"));
+
+            var result = await _service.UpdateAsync(CustomerId, Changed);
+
+            var failed = Assert.IsType<UpdatePreferencesResult.NotificationFailed>(result);
+
+            Assert.Equal(Changed, failed.Preferences);
+
+            _repository.Verify(r => r.UpdateAsync(CustomerId, Changed, It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }
