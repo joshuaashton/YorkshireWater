@@ -1,1 +1,24 @@
-@YorkshireWater.Api_HostAddress = http://localhost:5227
+@host = http://localhost:5227
+@josh = 11111111-1111-1111-1111-111111111111
+@steve = 22222222-2222-2222-2222-222222222222
+
+### Get preferences for a seeded customer (200)
+GET {{host}}/api/customers/{{josh}}/notification-preferences
+
+### Update preferences (200, notification logged by the API)
+PUT {{host}}/api/customers/{{steve}}/notification-preferences
+Content-Type: application/json
+
+{ "emailEnabled": true, "smsEnabled": true }
+
+### Unknown customer (404)
+GET {{host}}/api/customers/00000000-0000-0000-0000-000000000000/notification-preferences
+
+### Invalid GUID (400)
+GET {{host}}/api/customers/not-a-guid/notification-preferences
+
+### Missing property (400)
+PUT {{host}}/api/customers/{{josh}}/notification-preferences
+Content-Type: application/json
+
+{ "emailEnabled": true }
